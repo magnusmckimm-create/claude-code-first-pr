@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus Flow</title>
+<style>
+  :root{
+    --bg-top:#eaf3ec;
+    --bg-bottom:#dcece0;
+    --card:#ffffff;
+    --ink:#233127;
+    --muted:#6b7d70;
+    --accent:#4a8b62;
+    --accent-dark:#356b49;
+    --break:#4a7c9b;
+    --break-dark:#345d78;
+    --ring-track:#e3ece5;
+    --danger:#c96a5a;
+    --shadow:0 10px 30px rgba(35,49,39,0.10);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,var(--bg-top),var(--bg-bottom));
+    color:var(--ink);
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:40px 16px;
+  }
+  .app{
+    width:100%;
+    max-width:480px;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+  }
+  header{
+    text-align:center;
+  }
+  header h1{
+    margin:0;
+    font-size:28px;
+    font-weight:700;
+    letter-spacing:-0.02em;
+  }
+  header p{
+    margin:6px 0 0;
+    color:var(--muted);
+    font-size:14px;
+  }
+  .card{
+    background:var(--card);
+    border-radius:20px;
+    box-shadow:var(--shadow);
+    padding:28px;
+  }
+  .mode-tabs{
+    display:flex;
+    gap:8px;
+    justify-content:center;
+    margin-bottom:22px;
+  }
+  .mode-tab{
+    border:none;
+    background:var(--ring-track);
+    color:var(--muted);
+    font-size:13px;
+    font-weight:600;
+    padding:8px 14px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:background .2s,color .2s;
+  }
+  .mode-tab.active{
+    background:var(--accent);
+    color:#fff;
+  }
+  .mode-tab.active.break{
+    background:var(--break);
+  }
+  .timer-wrap{
+    display:flex;
+    justify-content:center;
+    margin-bottom:22px;
+  }
+  .ring{
+    position:relative;
+    width:240px;
+    height:240px;
+  }
+  .ring svg{
+    transform:rotate(-90deg);
+    width:100%;
+    height:100%;
+  }
+  .ring circle{
+    fill:none;
+    stroke-width:12;
+  }
+  .ring .track{
+    stroke:var(--ring-track);
+  }
+  .ring .progress{
+    stroke:var(--accent);
+    stroke-linecap:round;
+    transition:stroke-dashoffset 0.3s linear, stroke 0.3s ease;
+  }
+  .ring.break .progress{
+    stroke:var(--break);
+  }
+  .ring-center{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+  }
+  .time{
+    font-size:48px;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:-0.02em;
+  }
+  .session-label{
+    margin-top:4px;
+    font-size:13px;
+    color:var(--muted);
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+  }
+  .controls{
+    display:flex;
+    gap:10px;
+    justify-content:center;
+  }
+  button.control{
+    border:none;
+    border-radius:12px;
+    padding:12px 22px;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    transition:transform .15s ease, opacity .15s ease;
+  }
+  button.control:active{
+    transform:scale(0.96);
+  }
+  .btn-primary{
+    background:var(--accent);
+    color:#fff;
+  }
+  .ring.break ~ .controls .btn-primary,
+  .card.break-mode .btn-primary{
+    background:var(--break);
+  }
+  .btn-secondary{
+    background:var(--ring-track);
+    color:var(--ink);
+  }
+  .btn-secondary:hover{
+    opacity:0.85;
+  }
+  .settings-row{
+    display:flex;
+    gap:14px;
+    justify-content:center;
+    margin-top:18px;
+    font-size:13px;
+    color:var(--muted);
+  }
+  .settings-row label{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+  }
+  .settings-row input{
+    width:56px;
+    text-align:center;
+    border:1px solid var(--ring-track);
+    border-radius:8px;
+    padding:6px;
+    font-size:14px;
+    color:var(--ink);
+  }
+  .garden-card{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+  .garden-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+  }
+  .garden-header h2{
+    margin:0;
+    font-size:16px;
+  }
+  .streak-pill{
+    background:#fdf1e0;
+    color:#b6752b;
+    font-size:12px;
+    font-weight:700;
+    padding:4px 10px;
+    border-radius:999px;
+    white-space:nowrap;
+  }
+  .garden-plot{
+    background:#f3f8f2;
+    border-radius:16px;
+    min-height:120px;
+    display:flex;
+    flex-wrap:wrap;
+    align-content:flex-end;
+    gap:6px;
+    padding:14px;
+  }
+  .plant{
+    font-size:30px;
+    line-height:1;
+    animation:grow .35s ease-out;
+  }
+  @keyframes grow{
+    from{ transform:scale(0.2) translateY(10px); opacity:0; }
+    to{ transform:scale(1) translateY(0); opacity:1; }
+  }
+  .empty-note{
+    color:var(--muted);
+    font-size:13px;
+    margin:auto;
+  }
+  .stats{
+    display:flex;
+    gap:18px;
+    font-size:13px;
+    color:var(--muted);
+  }
+  .stats b{
+    color:var(--ink);
+    font-size:15px;
+    display:block;
+  }
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🌱 Focus Flow</h1>
+    <p>Finish a focus session, grow a plant.</p>
+  </header>
+
+  <div class="card" id="timerCard">
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="focus">Focus</button>
+      <button class="mode-tab" data-mode="short">Short Break</button>
+      <button class="mode-tab" data-mode="long">Long Break</button>
+    </div>
+
+    <div class="timer-wrap">
+      <div class="ring" id="ring">
+        <svg viewBox="0 0 240 240">
+          <circle class="track" cx="120" cy="120" r="108"></circle>
+          <circle class="progress" id="progressCircle" cx="120" cy="120" r="108"></circle>
+        </svg>
+        <div class="ring-center">
+          <div class="time" id="timeDisplay">25:00</div>
+          <div class="session-label" id="sessionLabel">Focus Session</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="control btn-primary" id="startPauseBtn">Start</button>
+      <button class="control btn-secondary" id="resetBtn">Reset</button>
+      <button class="control btn-secondary" id="skipBtn">Skip</button>
+    </div>
+
+    <div class="settings-row">
+      <label>Focus (min)
+        <input type="number" id="focusInput" min="1" max="90" value="25">
+      </label>
+      <label>Short break
+        <input type="number" id="shortInput" min="1" max="30" value="5">
+      </label>
+      <label>Long break
+        <input type="number" id="longInput" min="1" max="60" value="15">
+      </label>
+    </div>
+  </div>
+
+  <div class="card garden-card">
+    <div class="garden-header">
+      <h2>Today's Garden</h2>
+      <span class="streak-pill" id="streakPill">🔥 0 day streak</span>
+    </div>
+    <div class="garden-plot" id="gardenPlot">
+      <span class="empty-note">Complete a focus session to plant something here.</span>
+    </div>
+    <div class="stats">
+      <div>Sessions today <b id="todayCount">0</b></div>
+      <div>Total sessions <b id="totalCount">0</b></div>
+      <div>Best streak <b id="bestStreak">0</b></div>
+    </div>
+  </div>
+
+  <footer>Your progress is saved locally in this browser.</footer>
+</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'focusFlowState.v1';
+  const PLANTS = ['🌱','🌿','🌾','🌻','🌼','🌸','🌷','🌹','🍀','🌳'];
+
+  const durations = { focus: 25, short: 5, long: 15 };
+  let mode = 'focus';
+  let secondsLeft = durations.focus * 60;
+  let totalSeconds = durations.focus * 60;
+  let running = false;
+  let timerId = null;
+  let focusCountSinceLongBreak = 0;
+
+  const timeDisplay = document.getElementById('timeDisplay');
+  const sessionLabel = document.getElementById('sessionLabel');
+  const startPauseBtn = document.getElementById('startPauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const skipBtn = document.getElementById('skipBtn');
+  const progressCircle = document.getElementById('progressCircle');
+  const ring = document.getElementById('ring');
+  const timerCard = document.getElementById('timerCard');
+  const modeTabs = document.querySelectorAll('.mode-tab');
+  const focusInput = document.getElementById('focusInput');
+  const shortInput = document.getElementById('shortInput');
+  const longInput = document.getElementById('longInput');
+  const gardenPlot = document.getElementById('gardenPlot');
+  const streakPill = document.getElementById('streakPill');
+  const todayCountEl = document.getElementById('todayCount');
+  const totalCountEl = document.getElementById('totalCount');
+  const bestStreakEl = document.getElementById('bestStreak');
+
+  const RADIUS = 108;
+  const CIRC = 2 * Math.PI * RADIUS;
+  progressCircle.style.strokeDasharray = CIRC;
+
+  function todayKey(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  function loadState(){
+    let raw;
+    try{ raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){ raw = null; }
+    if(!raw){
+      raw = { totalSessions:0, bestStreak:0, currentStreak:0, lastSessionDate:null, gardenByDate:{} };
+    }
+    return raw;
+  }
+
+  function saveState(state){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  let state = loadState();
+
+  function dateDiffInDays(a, b){
+    const da = new Date(a + 'T00:00:00');
+    const db = new Date(b + 'T00:00:00');
+    return Math.round((db - da) / 86400000);
+  }
+
+  function renderGarden(){
+    const key = todayKey();
+    const plants = state.gardenByDate[key] || [];
+    gardenPlot.innerHTML = '';
+    if(plants.length === 0){
+      gardenPlot.innerHTML = '<span class="empty-note">Complete a focus session to plant something here.</span>';
+    } else {
+      plants.forEach(p => {
+        const span = document.createElement('span');
+        span.className = 'plant';
+        span.textContent = p;
+        gardenPlot.appendChild(span);
+      });
+    }
+    todayCountEl.textContent = plants.length;
+    totalCountEl.textContent = state.totalSessions;
+    bestStreakEl.textContent = state.bestStreak;
+    streakPill.textContent = '🔥 ' + state.currentStreak + ' day streak';
+  }
+
+  function recordCompletedFocusSession(){
+    const key = todayKey();
+    if(!state.gardenByDate[key]) state.gardenByDate[key] = [];
+    const plant = PLANTS[Math.min(state.gardenByDate[key].length, PLANTS.length - 1)];
+    state.gardenByDate[key].push(plant);
+    state.totalSessions += 1;
+
+    if(state.lastSessionDate !== key){
+      if(state.lastSessionDate && dateDiffInDays(state.lastSessionDate, key) === 1){
+        state.currentStreak += 1;
+      } else {
+        state.currentStreak = 1;
+      }
+      state.lastSessionDate = key;
+    }
+    state.bestStreak = Math.max(state.bestStreak, state.currentStreak);
+
+    saveState(state);
+    renderGarden();
+  }
+
+  function formatTime(s){
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+  }
+
+  function updateRing(){
+    const fraction = totalSeconds === 0 ? 0 : secondsLeft / totalSeconds;
+    const offset = CIRC * (1 - fraction);
+    progressCircle.style.strokeDashoffset = offset;
+  }
+
+  function updateDisplay(){
+    timeDisplay.textContent = formatTime(secondsLeft);
+    updateRing();
+    document.title = (running ? formatTime(secondsLeft) + ' – ' : '') + 'Focus Flow';
+  }
+
+  function setMode(newMode, resetTimer){
+    mode = newMode;
+    modeTabs.forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
+    const isBreak = mode !== 'focus';
+    ring.classList.toggle('break', isBreak);
+    timerCard.classList.toggle('break-mode', isBreak);
+    sessionLabel.textContent = mode === 'focus' ? 'Focus Session' : (mode === 'short' ? 'Short Break' : 'Long Break');
+
+    if(resetTimer !== false){
+      const mins = mode === 'focus' ? Number(focusInput.value) : (mode === 'short' ? Number(shortInput.value) : Number(longInput.value));
+      totalSeconds = mins * 60;
+      secondsLeft = totalSeconds;
+    }
+    updateDisplay();
+  }
+
+  function playChime(){
+    try{
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = ctx.currentTime;
+      [0, 0.18, 0.36].forEach((delay, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 660 + i * 110;
+        gain.gain.setValueAtTime(0, now + delay);
+        gain.gain.linearRampToValueAtTime(0.18, now + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.4);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.42);
+      });
+    }catch(e){ /* audio not available */ }
+  }
+
+  function tick(){
+    secondsLeft -= 1;
+    if(secondsLeft <= 0){
+      clearInterval(timerId);
+      running = false;
+      startPauseBtn.textContent = 'Start';
+      playChime();
+
+      if(mode === 'focus'){
+        recordCompletedFocusSession();
+        focusCountSinceLongBreak += 1;
+        if(focusCountSinceLongBreak >= 4){
+          focusCountSinceLongBreak = 0;
+          setMode('long');
+        } else {
+          setMode('short');
+        }
+      } else {
+        setMode('focus');
+      }
+      return;
+    }
+    updateDisplay();
+  }
+
+  function start(){
+    if(running) return;
+    running = true;
+    startPauseBtn.textContent = 'Pause';
+    timerId = setInterval(tick, 1000);
+  }
+
+  function pause(){
+    running = false;
+    startPauseBtn.textContent = 'Start';
+    clearInterval(timerId);
+  }
+
+  startPauseBtn.addEventListener('click', () => {
+    if(running) pause(); else start();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    pause();
+    setMode(mode);
+  });
+
+  skipBtn.addEventListener('click', () => {
+    pause();
+    if(mode === 'focus'){
+      setMode('short');
+    } else {
+      setMode('focus');
+    }
+  });
+
+  modeTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      pause();
+      setMode(tab.dataset.mode);
+    });
+  });
+
+  [focusInput, shortInput, longInput].forEach(input => {
+    input.addEventListener('change', () => {
+      if(!running){
+        setMode(mode);
+      }
+    });
+  });
+
+  setMode('focus', true);
+  renderGarden();
+})();
+</script>
+</body>
+</html>
