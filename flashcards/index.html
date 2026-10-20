@@ -1,0 +1,581 @@
+<!doctype html><html><head><meta charset="utf8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2e3f9e">
+<meta name="description" content="A swipeable flashcard trainer for any word pack, with streaks and offline progress.">
+<title>Flash Trainer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+JP:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<script src="core500-data.js"></script>
+<style>
+:root {
+  --bg: #f2f3f7; --surface: #ffffff; --ink: #161b2e; --muted: #5d6378; --line: #d8dbe6;
+  --accent: #2e3f9e; --accent-soft: #e4e8f8; --good: #2c7a57; --good-soft: #e1f2ea;
+  --again: #a9452c; --again-soft: #f8e6e0;
+  --shadow: 0 1px 2px rgba(22,27,46,.06), 0 8px 28px rgba(22,27,46,.08);
+  --f-jp: "Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-ui: "Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --f-mono: "IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#0e1120; --surface:#171b2d; --ink:#e8eaf3; --muted:#9ba1b9; --line:#2a2f48;
+    --accent:#9aa8f3; --accent-soft:#232a4f; --good:#62c59b; --good-soft:#17322a;
+    --again:#e98d6e; --again-soft:#3a2119;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35); color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html,body { margin:0; padding:0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 15px; line-height: 1.5;
+  padding-top: env(safe-area-inset-top,0px); padding-bottom: env(safe-area-inset-bottom,0px); }
+.wrap { max-width: 580px; margin: 0 auto; padding: 18px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+
+header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+h1 { margin: 0; font-size: 1.3rem; font-weight: 700; }
+.streak { display: flex; align-items: center; gap: 5px; font-family: var(--f-mono); font-size: .85rem;
+  background: var(--accent-soft); color: var(--accent); border-radius: 99px; padding: 5px 11px; white-space: nowrap; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+select, .chip, .btn {
+  font: inherit; font-size: .85rem; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; cursor: pointer;
+}
+select { flex: 1 1 160px; min-width: 0; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+select:focus-visible, .chip:focus-visible, .btn:focus-visible, .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.progress { display: flex; flex-direction: column; gap: 6px; }
+.bar { height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--good); transition: width .3s ease; }
+.progress-label { display: flex; justify-content: space-between; font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.stage { position: relative; touch-action: pan-y; }
+.card {
+  position: relative; height: 300px; border: 0; padding: 0; width: 100%; background: none; cursor: grab;
+  transform-style: preserve-3d; transition: transform .2s ease; border-radius: 14px; color: inherit; user-select: none;
+}
+.card.dragging { transition: none; cursor: grabbing; }
+.card.flipped .face-inner { transform: rotateY(180deg); }
+.face-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .45s cubic-bezier(.2,.7,.2,1); }
+.face {
+  position: absolute; inset: 0; border-radius: 14px; background: var(--surface); box-shadow: var(--shadow);
+  backface-visibility: hidden; -webkit-backface-visibility: hidden; display: flex; flex-direction: column;
+  padding: 16px 18px; overflow: hidden; border: 1px solid var(--line);
+}
+.face.back { transform: rotateY(180deg); }
+.meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .72rem; color: var(--muted); }
+.status { font-size: .68rem; padding: 2px 8px; border-radius: 99px; background: var(--good-soft); color: var(--good); font-weight: 500; }
+.body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; min-height: 0; }
+.main-text { font-family: var(--f-jp); font-weight: 500; font-size: 2.1rem; line-height: 1.25; color: var(--ink); overflow-wrap: anywhere; max-width: 100%; }
+.sub-text { font-family: var(--f-ui); font-size: 1rem; color: var(--muted); }
+.hint-note { font-size: .78rem; color: var(--muted); max-width: 32ch; }
+.stamp { position: absolute; top: 18px; font-family: var(--f-mono); font-weight: 700; font-size: 1.1rem; letter-spacing: .08em;
+  padding: 4px 10px; border-radius: 6px; border: 2px solid; opacity: 0; pointer-events: none; text-transform: uppercase; }
+.stamp.good { right: 18px; color: var(--good); border-color: var(--good); transform: rotate(8deg); }
+.stamp.again { left: 18px; color: var(--again); border-color: var(--again); transform: rotate(-8deg); }
+
+.grade { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 8px; }
+.btn { padding: 11px 14px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn.nav { font-family: var(--f-mono); padding-inline: 14px; }
+.btn.again { color: var(--again); background: var(--again-soft); border-color: transparent; }
+.btn.good { color: var(--good); background: var(--good-soft); border-color: transparent; }
+.btn:hover { filter: brightness(.97); }
+kbd { font-family: var(--f-mono); font-size: .7rem; opacity: .7; }
+
+.empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+
+details.manage { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+details.manage > summary { cursor: pointer; padding: 12px 14px; font-weight: 500; list-style: none; display: flex; align-items: center; gap: 6px; }
+details.manage > summary::-webkit-details-marker { display: none; }
+details.manage > summary::before { content: "▸"; font-size: .75em; transition: transform .15s; }
+details.manage[open] > summary::before { transform: rotate(90deg); }
+.manage-body { padding: 0 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.manage-body h3 { margin: 0 0 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.field-row { display: flex; flex-wrap: wrap; gap: 8px; }
+input[type=text] { font: inherit; font-size: .85rem; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 11px; flex: 1 1 160px; min-width: 0; }
+textarea { width: 100%; height: 110px; font-family: var(--f-mono); font-size: .75rem; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
+.pack-list { display: flex; flex-direction: column; gap: 6px; }
+.pack-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .85rem;
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.pack-row .rm { font-size: .72rem; color: var(--again); background: none; border: none; cursor: pointer; padding: 2px 4px; }
+.note { font-size: .78rem; color: var(--muted); margin: 0; }
+.toast { font-size: .8rem; color: var(--good); }
+.danger-row { display: flex; justify-content: flex-end; }
+.btn.danger { color: var(--again); }
+.keys { font-size: .75rem; color: var(--muted); }
+@media (max-width: 480px) {
+  .card { height: 280px; }
+  .main-text { font-size: 1.8rem; }
+  .keys { display: none; }
+  kbd { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .card, .face-inner, .bar > i { transition: none !important; } }
+</style>
+</head><body>
+<div class="wrap">
+  <header>
+    <h1>📇 Flash Trainer</h1>
+    <div class="streak" id="streak" title="Consecutive days studied"></div>
+  </header>
+
+  <div class="toolbar">
+    <select id="deckSel" aria-label="Which pack to study"></select>
+    <button class="chip" id="dirBtn" aria-pressed="false">front → back</button>
+    <button class="chip" id="subBtn" aria-pressed="true">Romaji</button>
+    <button class="chip" id="unlearnedBtn" aria-pressed="false">Unlearned only</button>
+    <button class="chip" id="shuffleBtn" aria-pressed="false">Shuffle</button>
+  </div>
+  <div class="chips" id="catChips"></div>
+
+  <div class="progress">
+    <div class="bar"><i id="barFill"></i></div>
+    <div class="progress-label"><span id="learnedLabel">0 of 0 learned</span><button class="chip" id="resetBtn" style="padding:2px 8px;font-size:.72rem">Reset progress</button></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="card" id="card" aria-label="Flashcard. Tap to flip, swipe right if you got it, left if you didn't.">
+      <div class="face-inner">
+        <div class="face front" id="front"></div>
+        <div class="face back" id="back"></div>
+      </div>
+      <div class="stamp again" id="stampAgain">again</div>
+      <div class="stamp good" id="stampGood">got it</div>
+    </button>
+  </div>
+  <div class="empty" id="empty" hidden></div>
+  <p class="hint-note" id="hint" style="text-align:center">Tap the card to flip it. Swipe right = got it, left = still learning.</p>
+
+  <div class="grade" id="grade">
+    <button class="btn nav" id="prevBtn" aria-label="Previous card">←</button>
+    <button class="btn again" id="againBtn">Still learning <kbd>1</kbd></button>
+    <button class="btn good" id="goodBtn">Got it <kbd>2</kbd></button>
+    <button class="btn nav" id="nextBtn" aria-label="Next card">→</button>
+  </div>
+  <p class="keys">Keys: <kbd>Space</kbd> flip · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>1</kbd> still learning · <kbd>2</kbd> got it</p>
+
+  <details class="manage" id="manage">
+    <summary>Manage packs</summary>
+    <div class="manage-body">
+      <div>
+        <h3>Add a pack</h3>
+        <div class="field-row">
+          <input type="text" id="packName" placeholder="Pack name (e.g. Core 500)">
+          <input type="text" id="frontLabel" placeholder="Front label (e.g. Japanese)">
+          <input type="text" id="backLabel" placeholder="Back label (e.g. English)">
+        </div>
+        <p class="note">Upload a file or paste text below. Accepts JSON (array of objects with <code>front</code>/<code>back</code>,
+          and optional <code>category</code>, <code>frontSub</code>, <code>backSub</code>), or tab/comma-separated lines
+          (<code>front&#9;back</code>, or <code>front&#9;back&#9;category</code> — one card per line).</p>
+        <div class="field-row">
+          <input type="file" id="fileInput" accept=".json,.csv,.tsv,.txt">
+        </div>
+        <textarea id="pasteBox" placeholder="…or paste term&#9;definition lines here"></textarea>
+        <div class="field-row">
+          <button class="btn" id="importBtn">Import pack</button>
+          <span class="toast" id="toast" hidden></span>
+        </div>
+      </div>
+      <div>
+        <h3>Your packs</h3>
+        <div class="pack-list" id="packList"></div>
+      </div>
+      <div class="danger-row">
+        <button class="btn danger" id="resetAllBtn">Reset all progress &amp; streak</button>
+      </div>
+    </div>
+  </details>
+</div>
+
+<script>
+// ---------- storage ----------
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("flash:" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("flash:" + k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem("flash:" + k); } catch (e) {} }
+};
+
+// ---------- built-in decks ----------
+const toKata = s => [...s].map(c => { const k = c.charCodeAt(0); return (k >= 0x3041 && k <= 0x3096) ? String.fromCharCode(k + 0x60) : c; }).join("");
+
+const BASIC = [
+  ["あいうえお", "a i u e o"], ["かきくけこ", "ka ki ku ke ko"], ["さしすせそ", "sa shi su se so"],
+  ["たちつてと", "ta chi tsu te to"], ["なにぬねの", "na ni nu ne no"], ["はひふへほ", "ha hi fu he ho"],
+  ["まみむめも", "ma mi mu me mo"], ["や_ゆ_よ", "ya _ yu _ yo"], ["らりるれろ", "ra ri ru re ro"],
+  ["わ___を", "wa _ _ _ wo"], ["ん____", "n _ _ _ _"]
+];
+const DAKUTEN = [
+  ["がぎぐげご", "ga gi gu ge go"], ["ざじずぜぞ", "za ji zu ze zo"], ["だぢづでど", "da ji zu de do"],
+  ["ばびぶべぼ", "ba bi bu be bo"], ["ぱぴぷぺぽ", "pa pi pu pe po"]
+];
+const YOON = [
+  ["きゃ きゅ きょ", "kya kyu kyo"], ["ぎゃ ぎゅ ぎょ", "gya gyu gyo"], ["しゃ しゅ しょ", "sha shu sho"],
+  ["じゃ じゅ じょ", "ja ju jo"], ["ちゃ ちゅ ちょ", "cha chu cho"], ["にゃ にゅ にょ", "nya nyu nyo"],
+  ["ひゃ ひゅ ひょ", "hya hyu hyo"], ["びゃ びゅ びょ", "bya byu byo"], ["ぴゃ ぴゅ ぴょ", "pya pyu pyo"],
+  ["みゃ みゅ みょ", "mya myu myo"], ["りゃ りゅ りょ", "rya ryu ryo"]
+];
+
+function buildKanaDeck() {
+  const cards = [];
+  function addTable(script, setLabel, rows, splitter) {
+    rows.forEach(([kanaStr, romStr]) => {
+      const kanas = splitter(kanaStr), roms = romStr.split(" ");
+      kanas.forEach((k, i) => {
+        if (k === "_") return;
+        const kana = script === "hira" ? k : toKata(k);
+        cards.push({ front: kana, back: roms[i], category: (script === "hira" ? "Hiragana" : "Katakana") + " · " + setLabel });
+      });
+    });
+  }
+  ["hira", "kata"].forEach(script => {
+    addTable(script, "basic", BASIC, s => [...s]);
+    addTable(script, "dakuten", DAKUTEN, s => [...s]);
+    addTable(script, "combinations", YOON, s => s.split(" "));
+  });
+  return { id: "builtin-kana", name: "Kana (hiragana & katakana)", builtin: true, frontLabel: "Kana", backLabel: "Romaji", cards };
+}
+
+function buildCore500Deck() {
+  const cards = CORE500_WORDS.map(([jp, romaji, en, category]) => ({ front: jp, frontSub: romaji, back: en, category }));
+  return { id: "builtin-core500", name: "Japanese Core 500", builtin: true, frontLabel: "Japanese", backLabel: "English", cards };
+}
+
+const BUILTIN_DECKS = [buildKanaDeck(), buildCore500Deck()];
+
+// ---------- deck + progress state ----------
+function loadCustomDecks() { return store.get("customDecks", []); }
+function saveCustomDecks(list) { store.set("customDecks", list); }
+function allDecks() { return [...BUILTIN_DECKS, ...loadCustomDecks()]; }
+function findDeck(id) { return allDecks().find(d => d.id === id); }
+
+function loadProgress() { return store.get("progress", {}); }
+function learnedSetFor(deckId) {
+  const p = loadProgress();
+  return new Set(p[deckId] || []);
+}
+function saveLearnedSet(deckId, set) {
+  const p = loadProgress();
+  p[deckId] = [...set];
+  store.set("progress", p);
+}
+
+let opts = Object.assign({ deckId: "builtin-kana", enFirst: false, unlearned: false, shuffle: false, category: "", showSub: true }, store.get("opts", {}));
+if (!findDeck(opts.deckId)) opts.deckId = BUILTIN_DECKS[0].id;
+function saveOpts() { store.set("opts", opts); }
+
+let learned = learnedSetFor(opts.deckId);
+let deck = [], pos = 0, flipped = false;
+
+function cardKey(c, i) { return c.id != null ? String(c.id) : String(i); }
+
+function currentDeck() { return findDeck(opts.deckId); }
+
+function categoriesFor(d) {
+  const cats = [...new Set(d.cards.map(c => c.category).filter(Boolean))];
+  return cats;
+}
+
+function buildDeck(keepIdx) {
+  const d = currentDeck();
+  if (!d) { deck = []; return; }
+  let cards = d.cards.map((c, i) => ({ ...c, _idx: i }));
+  if (opts.category) cards = cards.filter(c => c.category === opts.category);
+  if (opts.unlearned) cards = cards.filter(c => !learned.has(cardKey(c, c._idx)));
+  if (opts.shuffle) for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; }
+  deck = cards;
+  pos = (keepIdx != null && keepIdx < deck.length) ? keepIdx : 0;
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+// ---------- streak ----------
+const GOOD_GOAL = 10; // "got it" grades needed in a day before it counts toward the streak
+function todayKey() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function daysBetween(a, b) { return Math.round((Date.parse(b) - Date.parse(a)) / 86400000); }
+function bumpStreak() {
+  let s = store.get("streak", { count: 0, last: null });
+  const t = todayKey();
+  if (s.last !== t) {
+    if (s.last && daysBetween(s.last, t) === 1) s.count += 1;
+    else s.count = 1;
+    s.last = t;
+    store.set("streak", s);
+  }
+}
+function recordGood() {
+  const t = todayKey();
+  let g = store.get("dailyGood", { date: null, count: 0 });
+  if (g.date !== t) g = { date: t, count: 0 };
+  g.count += 1;
+  store.set("dailyGood", g);
+  if (g.count >= GOOD_GOAL) bumpStreak();
+  renderStreak();
+}
+function renderStreak() {
+  const s = store.get("streak", { count: 0, last: null });
+  const stale = s.last && daysBetween(s.last, todayKey()) > 1;
+  const count = stale ? 0 : s.count;
+  const t = todayKey();
+  const g = store.get("dailyGood", { date: null, count: 0 });
+  const todayCount = g.date === t ? g.count : 0;
+  if (s.last === t) {
+    $("streak").textContent = `🔥 ${count} day${count === 1 ? "" : "s"}`;
+  } else if (todayCount > 0) {
+    $("streak").textContent = `${Math.min(todayCount, GOOD_GOAL)}/${GOOD_GOAL} today`;
+  } else {
+    $("streak").textContent = count > 0 ? `🔥 ${count} day${count === 1 ? "" : "s"} · get ${GOOD_GOAL} today to continue` : `Get ${GOOD_GOAL} "got it" today to start a streak`;
+  }
+}
+
+// ---------- render ----------
+function render() {
+  const d = currentDeck();
+  const has = deck.length > 0;
+  $("stage").hidden = !has; $("grade").hidden = !has; $("hint").hidden = !has;
+  $("empty").hidden = has;
+  if (!has) {
+    $("empty").textContent = d && d.cards.length
+      ? "Everything in this view is marked as learned. Turn off “Unlearned only” or pick another category."
+      : "This pack has no cards yet. Add some under “Manage packs”.";
+  }
+  const totalInView = d ? d.cards.filter(c => !opts.category || c.category === opts.category).length : 0;
+  const learnedInView = d ? d.cards.filter((c, i) => (!opts.category || c.category === opts.category) && learned.has(cardKey(c, i))).length : 0;
+  $("barFill").style.width = totalInView ? (learnedInView / totalInView * 100) + "%" : "0%";
+  $("learnedLabel").textContent = `${learnedInView} of ${totalInView} learned`;
+  if (!has) return;
+  const c = deck[pos];
+  const idxKey = cardKey(c, c._idx);
+  const isLearned = learned.has(idxKey);
+  const frontMain = opts.enFirst ? c.back : c.front;
+  const frontSub = opts.showSub ? (opts.enFirst ? c.backSub : c.frontSub) : "";
+  const backMain = opts.enFirst ? c.front : c.back;
+  const backSub = opts.showSub ? (opts.enFirst ? c.frontSub : c.backSub) : "";
+  const frontLbl = opts.enFirst ? (d.backLabel || "Back") : (d.frontLabel || "Front");
+  const backLbl = opts.enFirst ? (d.frontLabel || "Front") : (d.backLabel || "Back");
+  const metaFront = `<div class="meta"><span>${esc(frontLbl)}</span>${isLearned ? '<span class="status">Learned</span>' : (c.category ? `<span>${esc(c.category)}</span>` : "")}</div>`;
+  const metaBack = `<div class="meta"><span>${esc(backLbl)}</span>${isLearned ? '<span class="status">Learned</span>' : (c.category ? `<span>${esc(c.category)}</span>` : "")}</div>`;
+  $("front").innerHTML = metaFront + `<div class="body"><div class="main-text">${esc(frontMain)}</div>${frontSub ? `<div class="sub-text">${esc(frontSub)}</div>` : ""}</div>`;
+  $("back").innerHTML = metaBack + `<div class="body"><div class="main-text">${esc(backMain)}</div>${backSub ? `<div class="sub-text">${esc(backSub)}</div>` : ""}</div>`;
+  $("card").classList.toggle("flipped", flipped);
+  $("card").setAttribute("aria-label", flipped ? "Showing answer. Tap to flip back." : "Showing question. Tap to flip, swipe right if you got it, left if you didn't.");
+  $("counter") && ($("counter").textContent = `${pos + 1} / ${deck.length}`);
+}
+
+function renderCategoryChips() {
+  const d = currentDeck();
+  const cats = d ? categoriesFor(d) : [];
+  const box = $("catChips");
+  if (!cats.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<button class="chip" data-cat="" aria-pressed="${opts.category === ""}">All</button>` +
+    cats.map(c => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${opts.category === c}">${esc(c)}</button>`).join("");
+}
+
+function renderDeckSelect() {
+  const sel = $("deckSel");
+  sel.innerHTML = allDecks().map(d => `<option value="${d.id}">${esc(d.name)} (${d.cards.length})</option>`).join("");
+  sel.value = opts.deckId;
+}
+
+function renderDirLabel() {
+  const d = currentDeck();
+  const a = d ? (d.frontLabel || "Front") : "Front", b = d ? (d.backLabel || "Back") : "Back";
+  $("dirBtn").textContent = opts.enFirst ? `${b} → ${a}` : `${a} → ${b}`;
+  $("dirBtn").setAttribute("aria-pressed", String(opts.enFirst));
+  $("subBtn").setAttribute("aria-pressed", String(opts.showSub));
+  $("unlearnedBtn").setAttribute("aria-pressed", String(opts.unlearned));
+  $("shuffleBtn").setAttribute("aria-pressed", String(opts.shuffle));
+}
+
+function renderPackList() {
+  const custom = loadCustomDecks();
+  const box = $("packList");
+  if (!custom.length) { box.innerHTML = `<p class="note">No custom packs yet.</p>`; return; }
+  box.innerHTML = custom.map(d => `<div class="pack-row"><span>${esc(d.name)} (${d.cards.length})</span><button class="rm" data-id="${d.id}">Remove</button></div>`).join("");
+}
+
+function renderAll() {
+  renderDeckSelect(); renderCategoryChips(); renderDirLabel(); renderPackList(); renderStreak();
+  buildDeck(); flipped = false; render();
+}
+
+// ---------- actions ----------
+function go(delta) { if (!deck.length) return; pos = (pos + delta + deck.length) % deck.length; flipped = false; render(); }
+function flip() { if (!deck.length) return; flipped = !flipped; render(); }
+
+function flashStamp(el) {
+  el.style.transition = "none"; el.style.opacity = "1";
+  requestAnimationFrame(() => { el.style.transition = "opacity .5s"; el.style.opacity = "0"; });
+}
+
+function grade(ok) {
+  if (!deck.length) return;
+  const c = deck[pos];
+  const key = cardKey(c, c._idx);
+  if (ok) learned.add(key); else learned.delete(key);
+  saveLearnedSet(opts.deckId, learned);
+  if (ok) recordGood(); else renderStreak();
+  flashStamp(ok ? $("stampGood") : $("stampAgain"));
+  if (opts.unlearned && ok) {
+    deck.splice(pos, 1);
+    if (pos >= deck.length) pos = 0;
+    flipped = false; render();
+  } else {
+    go(1);
+  }
+}
+
+// ---------- events: controls ----------
+$("deckSel").addEventListener("change", e => { opts.deckId = e.target.value; opts.category = ""; saveOpts(); learned = learnedSetFor(opts.deckId); renderAll(); });
+$("dirBtn").addEventListener("click", () => { opts.enFirst = !opts.enFirst; saveOpts(); renderDirLabel(); flipped = false; render(); });
+$("subBtn").addEventListener("click", () => { opts.showSub = !opts.showSub; saveOpts(); renderDirLabel(); render(); });
+$("unlearnedBtn").addEventListener("click", () => { opts.unlearned = !opts.unlearned; saveOpts(); renderDirLabel(); buildDeck(); flipped = false; render(); });
+$("shuffleBtn").addEventListener("click", () => { opts.shuffle = !opts.shuffle; saveOpts(); renderDirLabel(); buildDeck(); flipped = false; render(); });
+$("catChips").addEventListener("click", e => {
+  const b = e.target.closest("button[data-cat]"); if (!b) return;
+  opts.category = b.dataset.cat; saveOpts(); renderCategoryChips(); buildDeck(); flipped = false; render();
+});
+$("card").addEventListener("click", e => { if (!dragMoved) flip(); });
+$("prevBtn").addEventListener("click", () => go(-1));
+$("nextBtn").addEventListener("click", () => go(1));
+$("againBtn").addEventListener("click", () => grade(false));
+$("goodBtn").addEventListener("click", () => grade(true));
+
+let resetArmed = false;
+$("resetBtn").addEventListener("click", e => {
+  if (!resetArmed) { resetArmed = true; e.target.textContent = "Tap again to reset"; setTimeout(() => { resetArmed = false; e.target.textContent = "Reset progress"; }, 3000); return; }
+  resetArmed = false; e.target.textContent = "Reset progress";
+  learned = new Set(); saveLearnedSet(opts.deckId, learned); buildDeck(); flipped = false; render();
+});
+
+let resetAllArmed = false;
+$("resetAllBtn").addEventListener("click", e => {
+  if (!resetAllArmed) { resetAllArmed = true; e.target.textContent = "Tap again to confirm"; setTimeout(() => { resetAllArmed = false; e.target.textContent = "Reset all progress & streak"; }, 3000); return; }
+  resetAllArmed = false; e.target.textContent = "Reset all progress & streak";
+  store.del("progress"); store.del("streak"); store.del("dailyGood");
+  learned = learnedSetFor(opts.deckId);
+  buildDeck(); flipped = false; render(); renderStreak();
+});
+
+document.addEventListener("keydown", e => {
+  if (["SELECT", "TEXTAREA", "INPUT"].includes(e.target.tagName)) return;
+  if (e.key === " " || e.key === "Enter") { if (e.target.tagName === "BUTTON" && e.target.id !== "card") return; e.preventDefault(); flip(); }
+  else if (e.key === "ArrowRight") go(1);
+  else if (e.key === "ArrowLeft") go(-1);
+  else if (e.key === "1") grade(false);
+  else if (e.key === "2") grade(true);
+});
+
+// ---------- swipe (pointer events: touch + mouse) ----------
+const cardEl = $("card");
+let dragging = false, dragMoved = false, startX = 0, startY = 0, dx = 0;
+const SWIPE_THRESHOLD = 90;
+
+cardEl.addEventListener("pointerdown", e => {
+  if (!deck.length) return;
+  dragging = true; dragMoved = false; startX = e.clientX; startY = e.clientY; dx = 0;
+  cardEl.classList.add("dragging");
+  try { cardEl.setPointerCapture(e.pointerId); } catch (err) {}
+});
+cardEl.addEventListener("pointermove", e => {
+  if (!dragging) return;
+  dx = e.clientX - startX;
+  const dy = e.clientY - startY;
+  if (Math.abs(dx) > 6 || Math.abs(dy) > 6) dragMoved = true;
+  if (Math.abs(dx) < Math.abs(dy) * 1.3) return; // mostly vertical, let it be
+  const rot = dx / 18;
+  cardEl.style.transform = `translateX(${dx}px) rotate(${rot}deg)`;
+  const ratio = Math.min(Math.abs(dx) / SWIPE_THRESHOLD, 1);
+  if (dx > 0) { $("stampGood").style.opacity = ratio; $("stampAgain").style.opacity = 0; }
+  else { $("stampAgain").style.opacity = ratio; $("stampGood").style.opacity = 0; }
+});
+function endDrag(e) {
+  if (!dragging) return;
+  dragging = false;
+  cardEl.classList.remove("dragging");
+  $("stampGood").style.opacity = 0; $("stampAgain").style.opacity = 0;
+  if (Math.abs(dx) >= SWIPE_THRESHOLD) {
+    const goOk = dx > 0;
+    const flyX = (goOk ? 1 : -1) * 900;
+    cardEl.style.transition = "transform .3s ease";
+    cardEl.style.transform = `translateX(${flyX}px) rotate(${flyX / 18}deg)`;
+    setTimeout(() => { cardEl.style.transition = ""; cardEl.style.transform = ""; grade(goOk); }, 180);
+  } else {
+    cardEl.style.transform = "";
+  }
+  setTimeout(() => { dragMoved = false; }, 0);
+}
+cardEl.addEventListener("pointerup", endDrag);
+cardEl.addEventListener("pointercancel", endDrag);
+
+// ---------- import ----------
+function parseImport(text) {
+  text = text.trim();
+  if (!text) return [];
+  if (text.startsWith("[") || text.startsWith("{")) {
+    try {
+      let data = JSON.parse(text);
+      if (!Array.isArray(data)) data = data.cards || [];
+      return data.map(o => ({ front: o.front ?? o.term ?? "", back: o.back ?? o.definition ?? "", category: o.category || "", frontSub: o.frontSub || "", backSub: o.backSub || "" })).filter(c => c.front || c.back);
+    } catch (e) { /* fall through to delimited parsing */ }
+  }
+  return text.split(/\r?\n/).filter(l => l.trim()).map(line => {
+    const sep = line.includes("\t") ? "\t" : ",";
+    const parts = line.split(sep);
+    return { front: (parts[0] || "").trim(), back: (parts[1] || "").trim(), category: (parts[2] || "").trim(), frontSub: (parts[3] || "").trim(), backSub: (parts[4] || "").trim() };
+  }).filter(c => c.front || c.back);
+}
+
+function doImport(text) {
+  const cards = parseImport(text);
+  if (!cards.length) { showToast("No cards found in that input."); return; }
+  const name = $("packName").value.trim() || "Imported pack " + new Date().toLocaleDateString();
+  const frontLabel = $("frontLabel").value.trim() || "Front";
+  const backLabel = $("backLabel").value.trim() || "Back";
+  const list = loadCustomDecks();
+  const deckObj = { id: "custom-" + Date.now(), name, builtin: false, frontLabel, backLabel, cards };
+  list.push(deckObj);
+  saveCustomDecks(list);
+  opts.deckId = deckObj.id; opts.category = ""; saveOpts();
+  learned = learnedSetFor(opts.deckId);
+  $("packName").value = ""; $("frontLabel").value = ""; $("backLabel").value = ""; $("pasteBox").value = ""; $("fileInput").value = "";
+  showToast(`Added "${name}" with ${cards.length} cards.`);
+  renderAll();
+}
+
+function showToast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; setTimeout(() => { t.hidden = true; }, 3500); }
+
+$("importBtn").addEventListener("click", () => {
+  const file = $("fileInput").files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = () => doImport(String(reader.result || ""));
+    reader.readAsText(file);
+  } else {
+    doImport($("pasteBox").value);
+  }
+});
+
+$("packList").addEventListener("click", e => {
+  const b = e.target.closest("button[data-id]"); if (!b) return;
+  const id = b.dataset.id;
+  let list = loadCustomDecks();
+  list = list.filter(d => d.id !== id);
+  saveCustomDecks(list);
+  const p = loadProgress(); delete p[id]; store.set("progress", p);
+  if (opts.deckId === id) { opts.deckId = BUILTIN_DECKS[0].id; opts.category = ""; saveOpts(); learned = learnedSetFor(opts.deckId); }
+  renderAll();
+});
+
+// ---------- init ----------
+if ("serviceWorker" in navigator) { navigator.serviceWorker.register("sw.js").catch(() => {}); }
+renderAll();
+</script>
+</body></html>

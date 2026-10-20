@@ -1,0 +1,15 @@
+{
+  "name": "Flash Trainer",
+  "short_name": "Flash Trainer",
+  "description": "A swipeable flashcard trainer for any word pack, with streaks and offline progress.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f3f7",
+  "theme_color": "#2e3f9e",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
